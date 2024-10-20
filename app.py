@@ -17,9 +17,12 @@ def stop_recording():
     global recording_process
     if recording_process:
         os.killpg(os.getpgid(recording_process.pid), signal.SIGINT)
-        recording_process = None
-        # After stopping the recording, process the latest camera video
-        # process_latest_camera_recording()
+        recording_process = None        
+    # After stopping the recording, process the latest camera video
+    process_latest_camera_recording()
+
+def crop_last_recording():
+        process_latest_camera_recording()
 
 # Function to start prediction
 def start_prediction():
@@ -34,14 +37,18 @@ root.title("Application Wrapper")
 root.geometry("300x300")
 
 # Creating the buttons
-prediction_button = tk.Button(root, text="Start Prediction", command=start_prediction)
-prediction_button.pack(pady=20)
-
 recording_button = tk.Button(root, text="Start Recording", command=start_recording)
 recording_button.pack(pady=20)
 
 stop_button = tk.Button(root, text="Stop Recording", command=stop_recording)
 stop_button.pack(pady=20)
+
+crop_video_button = tk.Button(root, text="Crop Last Recording", command=crop_last_recording)
+crop_video_button.pack(pady=20)
+
+prediction_button = tk.Button(root, text="Start Prediction", command=start_prediction)
+prediction_button.pack(pady=20)
+
 
 # Start the GUI loop
 root.mainloop()
