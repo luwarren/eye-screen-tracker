@@ -1,7 +1,6 @@
 import cv2
 import os
 import glob
-from moviepy.editor import VideoFileClip
 
 # Path to the Haar cascades for face and eye detection
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
@@ -16,21 +15,20 @@ def get_most_recent_video():
     most_recent_file = max(video_files, key=os.path.getctime)
     return most_recent_file
 
-
-import cv2
-import os
-
 # Function to detect eyes and crop the video, focusing only on the top half of the face
-def crop_video_to_eyes(video_path):
+def crop_video_to_eye_region(video_path):
     # Open the video file
     cap = cv2.VideoCapture(video_path)
-
+    
     # Get FPS from the original video
     fps = cap.get(cv2.CAP_PROP_FPS)
 
+    # Output path for the cropped video
     output_path = 'processed_videos/cropped_' + os.path.basename(video_path)
     out = None  # Initialize the video writer to None
+    crop_region = None  # To store the cropping region based on the first detected eye
 
+    # Process each frame of the video
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -39,41 +37,52 @@ def crop_video_to_eyes(video_path):
         # Convert frame to grayscale for detection
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # Detect face
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        if crop_region is None:
+            # Detect face
+            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-        for (x, y, w, h) in faces:
-            # Define the region to focus on the top left of the face
-            face_top_left_half_gray = gray[y:y + h // 2, x:x + w]
+            # If face is detected
+            for (x, y, w, h) in faces:
+                # Define the region for the top half of the face
+                face_top_half = gray[y:y + h // 2, x:x + w]
 
-            # Detect eyes within the top half of the face
-            eyes = eye_cascade.detectMultiScale(face_top_left_half_gray)
-            
-            if not eyes:
-                print("No eyes detected in the video frame.")
-                return None
+                # Detect eyes within the top half of the face
+                eyes = eye_cascade.detectMultiScale(face_top_half, scaleFactor=1.1, minNeighbors=5)
 
-            if eyes is not None:
-            # if len(eyes) >= 2:  # We assume we need at least two eyes
-                ex, ey, ew, eh = eyes[0]  # Get the first detected eye
+                if len(eyes) == 0:
+                    print("No eyes detected in this frame.")
+                    continue
 
-                # Define the cropping region around the detected eyes
-                crop_x1 = max(0, x + ex - ew)
-                crop_y1 = max(0, y + ey - eh)
-                crop_x2 = min(frame.shape[1], x + ex + ew * 2)
-                crop_y2 = min(frame.shape[0], y + ey + eh * 2)
+                # Get the first detected eye (if multiple are found)
+                ex, ey, ew, eh = eyes[0]
 
-                # Crop the frame around the detected eye region
-                cropped_frame = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                # Calculate the cropping region around the eye (square region)
+                eye_center_x = x + ex + ew // 2
+                eye_center_y = y + ey + eh // 2
+                side_length = max(ew, eh) * 2  # Create a square around the eye
+                half_side_length = side_length // 2
 
-                # Initialize VideoWriter
-                if out is None:
-                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                    cropped_height, cropped_width, _ = cropped_frame.shape
-                    out = cv2.VideoWriter(output_path, fourcc, fps, (cropped_width, cropped_height))
+                crop_x1 = max(0, eye_center_x - half_side_length)
+                crop_y1 = max(0, eye_center_y - half_side_length)
+                crop_x2 = min(frame.shape[1], eye_center_x + half_side_length)
+                crop_y2 = min(frame.shape[0], eye_center_y + half_side_length)
 
-                # Write the cropped frame to the output video
-                out.write(cropped_frame)
+                crop_region = (crop_x1, crop_y1, crop_x2, crop_y2)
+                break
+
+        if crop_region:
+            # Apply the cropping region from the first detected eye to all frames
+            crop_x1, crop_y1, crop_x2, crop_y2 = crop_region
+            cropped_frame = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+
+            # Initialize the VideoWriter if not already done
+            if out is None:
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                cropped_height, cropped_width, _ = cropped_frame.shape
+                out = cv2.VideoWriter(output_path, fourcc, fps, (cropped_width, cropped_height))
+
+            # Write the cropped frame to the output video
+            out.write(cropped_frame)
 
     # Release the video capture and writer objects
     cap.release()
@@ -87,8 +96,13 @@ def crop_video_to_eyes(video_path):
 def process_latest_camera_recording():
     video_path = get_most_recent_video()
     if video_path:
-        cropped_video = crop_video_to_eyes(video_path)
-        print(f"Video cropped and saved at: {cropped_video}")
+        cropped_video = crop_video_to_eye_region(video_path)
+        if cropped_video:
+            print(f"Video cropped and saved at: {cropped_video}")
+        else:
+            print("Error: No eyes were detected in the video.")
+    else:
+        print("No video to process.")
 
 # Run the script
 if __name__ == '__main__':

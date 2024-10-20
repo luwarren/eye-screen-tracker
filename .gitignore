@@ -4,5 +4,6 @@ __pycache__/
 *$py.class
 
 raw_videos
+processed_videos
 venv
 video1.mp4
